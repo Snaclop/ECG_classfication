@@ -1,0 +1,11 @@
+# Install PyTorch for your platform first: https://pytorch.org/get-started/locally/
+# An installed PyTorch 2.x build satisfies the requirement below.
+torch>=2,<3
+numpy==2.2.6
+pandas==2.2.3
+scipy==1.15.3
+scikit-learn==1.6.1
+matplotlib==3.10.3
+wfdb==4.3.0
+tqdm==4.67.1
+ipykernel==6.29.5

@@ -1,0 +1,12 @@
+.venv*/
+.artifacts/
+data/
+outputs/
+__pycache__/
+.pytest_cache/
+*.pyc
+.ipynb_checkpoints/
+参考文献/
+docs/
+paper
+tests/
