@@ -47,7 +47,7 @@ PTB-XL 归档默认分块下载并发为 8，可用 `--workers 1` 改为单连�
 | PTB-XL v1.0.3 | https://physionet.org/content/ptb-xl/1.0.3/ | `data/raw/ptb-xl-1.0.3/` | 主要使用 500 Hz、十秒、十二导联记录；100 Hz 版本也随官方归档保留 |
 | NSTDB v1.0.0 | https://physionet.org/content/nstdb/1.0.0/ | `data/raw/nstdb-1.0.0/` | 使用 `bw` 基线漂移、`ma` 肌电、`em` 电极运动三个原始噪声记录 |
 
-PTB-XL 的数据许可为 CC BY 4.0；NSTDB 为 Open Data Commons Attribution License v1.0。保留归档内许可文件，并在报告和论文中引用数据与原始论文。数据公开可下载。NSTDB 还包含已经叠加噪声的心电记录，本项目不把它们当作原始噪声源。
+PTB-XL 的数据许可为 CC BY 4.0；NSTDB 为 Open Data Commons Attribution License v1.0。保留归档内许可文件，并在报告和论文中引用数据与原始论文。数据公开可下载。
 
 ## 标签与划分
 
@@ -61,3 +61,18 @@ PTB-XL 的数据许可为 CC BY 4.0；NSTDB 为 Open Data Commons Attribution Li
 - `data/manifests/noise_splits.json` 预先将每段原始噪声按时间分为约 60%/20%/20%，边界保留十秒间隔，使用左闭右开采样索引。后续应先按该范围切片，再独立重采样，避免跨集合滤波。
 
 检查脚本固定随机种子为 42，输入两条十二导联心电记录，每条 5000 个采样点。小型一维卷积网络为每条记录输出五个类别分数，使用 Adam 优化器和 0.001 的学习率更新一次参数。检查通过时，结果文件中 `output_shape` 为 `[2, 5]`，`parameters_updated` 为 `true`。这些参数和输出用于检验数据读取与计算流程。
+
+## 生成信噪比为 6 dB 训练集
+
+完成数据准备后，在 `project/` 中运行下列命令。首条命令生成约 4.10 GB 的波形到 `data/derived/train_6db/`。第二条命令可单独复验。
+
+```text
+python scripts/generate_train_6db.py
+python scripts/generate_train_6db.py --verify-only
+```
+
+训练入口使用产物内的 `train.csv`。17,084 个 ECG 各有一条 `original` 和一条加噪样本，共 34,168 行，标签顺序沿用上文的五类顺序。`waveform_path` 相对于 `project/`。当 `format=wfdb` 时，使用 `wfdb.rdrecord(path).p_signal.T.astype("float32")` 读取原始记录；当 `format=npy` 时，使用 `numpy.load(path, allow_pickle=False)`。两者均为 `[12, 5000]`，单位 mV、采样率 500 Hz。
+
+打乱按 ECG 编号排序的训练记录，均分到 `bw`、`ma`、`em`、`mix` 四个条件。`bw_start_360`、`ma_start_360`、`em_start_360` 保存对应原始噪声文件中从零计数的起点，空白表示未使用。第一通道用于六个肢体导联，第二通道用于 V1–V6。`mix` 将三种噪声按通道去均值、调至相同有效值后相加。随后逐导联将总噪声调到心电去均值有效值的 `10**(-6/20)` 倍。人工 50 Hz 工频干扰留给最终测试对不同噪声的普适性。
+
+`audit.json` 汇总各条件数量、有效导联实测信噪比范围和恒定导联。验收逐条核对标签、片段起点、波形和配对关系，并从已保存波形与原始波形之差复算信噪比，容差为 ±0.01 dB。
