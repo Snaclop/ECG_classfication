@@ -87,3 +87,18 @@ python scripts/generate_test_50hz.py --verify-only
 产物中的 `test.csv` 共 4,316 行，每条心电配有 `original` 和 `50hz` 两个版本，沿用训练清单的标签顺序、`format` 和 `waveform_path` 读取方式。加噪波形在 `waveforms/` 中，格式为 `float32[12, 5000]`，采样率 500 Hz、单位 mV。十二导联共享频率 50 Hz、初相位 0 的正弦波，逐导联按去均值有效值缩放到 6 dB。恒定导联保留原值并标记。
 
 `audit.json` 记录成对样本数、实测信噪比范围和恒定导联。验收从落盘波形减去原始心电，检查所有有效导联的信噪比在 6.00 ± 0.01 dB 内，并核对频谱峰值和完整正弦波形。此数据用于最终评价人工工频干扰下的分类表现。
+
+## 生成一阶 DP 编码
+
+一阶融合模型使用波形及对应的 DP1 两路输入。在 `project/` 中执行下列命令，可为已有训练集、原始验证集和 50 Hz 测试集生成编码到 `data/derived/dp1/`。
+
+```text
+python scripts/generate_dp1.py
+python scripts/generate_dp1.py --verify-only
+```
+
+产物中的 `train.csv`、`validation.csv`、`test.csv` 分别有 34,168、2,146、4,316 行，保留来源清单的标签与波形信息，增加 `dp1_path` 和 `waveform_sha256`。两个路径字段都相对于 `project/`。原始验证集的行已补齐 `version=original`、`format=wfdb` 和 `waveform_path`。编码文件为 `int8[12, 5000]`，值为 -1、0、1，进入编码分支前转换为 float32。波形基线读取 `waveform_path`，融合模型额外读取同一行的 `dp1_path`。
+
+采用论文式 (1) 的一阶导数过零规则。本项目直接对模型读取的 float32 波形编码，差分计算采用 float64。具体约定为 `d[t]=x[t]-x[t-1]`；当 `d[t]>0` 且 `d[t-1]<=0` 时记 +1，当 `d[t]<0` 且 `d[t-1]>=0` 时记 -1，其余记 0。论文原实验使用 100 Hz 波形和三点滑动平均，本项目使用 500 Hz 波形、无滑动平均。[DP 论文](https://arxiv.org/html/2405.00724v1)
+
+`audit.json` 保存来源清单哈希、边界规则、各版本数量和事件统计。
