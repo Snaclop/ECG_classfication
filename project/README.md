@@ -1,7 +1,5 @@
 # 心电信号抗噪分类项目
 
-本项目研究如何结合原始心电波形与 DP 编码，提高噪声条件下的多标签分类表现。
-
 ## 首次运行
 
 **准备 Python 环境。** 推荐使用 Python 3.12。进入含有 `requirements.txt` 的 `project/` 目录，创建并激活自己的虚拟环境。下文的 `python` 指这个环境的解释器。各系统和终端的激活方式见 [Python 虚拟环境文档](https://docs.python.org/3/library/venv.html#how-venvs-work)。
@@ -76,3 +74,16 @@ python scripts/generate_train_6db.py --verify-only
 打乱按 ECG 编号排序的训练记录，均分到 `bw`、`ma`、`em`、`mix` 四个条件。`bw_start_360`、`ma_start_360`、`em_start_360` 保存对应原始噪声文件中从零计数的起点，空白表示未使用。第一通道用于六个肢体导联，第二通道用于 V1–V6。`mix` 将三种噪声按通道去均值、调至相同有效值后相加。随后逐导联将总噪声调到心电去均值有效值的 `10**(-6/20)` 倍。人工 50 Hz 工频干扰留给最终测试对不同噪声的普适性。
 
 `audit.json` 汇总各条件数量、有效导联实测信噪比范围和恒定导联。验收逐条核对标签、片段起点、波形和配对关系，并从已保存波形与原始波形之差复算信噪比，容差为 ±0.01 dB。
+
+## 生成最终测试集
+
+在 `project/` 中执行下列命令，为官方第 10 折的 2,158 条心电各生成一条 50 Hz、6 dB 的模拟工频干扰噪声，输出到 `data/derived/test_50hz_6db/`。第二条命令可单独复验。
+
+```text
+python scripts/generate_test_50hz.py
+python scripts/generate_test_50hz.py --verify-only
+```
+
+产物中的 `test.csv` 共 4,316 行，每条心电配有 `original` 和 `50hz` 两个版本，沿用训练清单的标签顺序、`format` 和 `waveform_path` 读取方式。加噪波形在 `waveforms/` 中，格式为 `float32[12, 5000]`，采样率 500 Hz、单位 mV。十二导联共享频率 50 Hz、初相位 0 的正弦波，逐导联按去均值有效值缩放到 6 dB。恒定导联保留原值并标记。
+
+`audit.json` 记录成对样本数、实测信噪比范围和恒定导联。验收从落盘波形减去原始心电，检查所有有效导联的信噪比在 6.00 ± 0.01 dB 内，并核对频谱峰值和完整正弦波形。此数据用于最终评价人工工频干扰下的分类表现。
