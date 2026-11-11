@@ -102,3 +102,18 @@ python scripts/generate_dp1.py --verify-only
 采用论文式 (1) 的一阶导数过零规则。本项目直接对模型读取的 float32 波形编码，差分计算采用 float64。具体约定为 `d[t]=x[t]-x[t-1]`；当 `d[t]>0` 且 `d[t-1]<=0` 时记 +1，当 `d[t]<0` 且 `d[t-1]>=0` 时记 -1，其余记 0。论文原实验使用 100 Hz 波形和三点滑动平均，本项目使用 500 Hz 波形、无滑动平均。[DP 论文](https://arxiv.org/html/2405.00724v1)
 
 `audit.json` 保存来源清单哈希、边界规则、各版本数量和事件统计。
+
+## 生成二阶 DP 编码
+
+完成一阶编码后，在 `project/` 中运行下列命令，为同一批 40,630 个样本生成二阶编码到 `data/derived/dp2/`。
+
+```text
+python scripts/generate_dp2.py
+python scripts/generate_dp2.py --verify-only
+```
+
+产物中的 `train.csv`、`validation.csv`、`test.csv` 分别有 34,168、2,146、4,316 行。每行同时包含 `waveform_path`、`dp1_path` 和 `dp2_path`，路径相对于 `project/`，标签和源波形哈希沿用一阶清单。
+
+二阶编码直接从对应波形计算 `d2[t]=(x[t]-x[t-1])-(x[t-1]-x[t-2])`，再按一阶编码使用的正负过零规则生成事件。输入为实际加载的 float32 波形，内部采用 float64 差分，平滑设置为 `none`，开头三个采样点置零，输出为 `int8[12, 5000]`。
+
+二阶融合模型加载一阶与二阶数组，用 `numpy.concatenate([dp1, dp2], axis=0).astype("float32")` 得到 `[24, 5000]` 的编码输入。前 12 个通道为一阶导联 I–V6，后 12 个为二阶导联 I–V6。原始波形仍由波形分支读取。生成规则、来源清单哈希及各条件事件数量保存在 `audit.json`。
