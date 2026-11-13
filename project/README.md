@@ -2,28 +2,19 @@
 
 ## 首次运行
 
-**准备 Python 环境。** 推荐使用 Python 3.12。进入含有 `requirements.txt` 的 `project/` 目录，创建并激活自己的虚拟环境。下文的 `python` 指这个环境的解释器。各系统和终端的激活方式见 [Python 虚拟环境文档](https://docs.python.org/3/library/venv.html#how-venvs-work)。
+**准备 Python 环境。** 推荐使用 Python 3.12。进入含有 `requirements.txt` 的 `project/` 目录，创建并激活自己的虚拟环境。下文的 `python` 指这个环境的解释器。
 
-**安装 PyTorch。** 在已激活的环境中，按操作系统和计算设备选择安装方式。CPU 和 NVIDIA GPU 用户可使用 [PyTorch 安装选择器](https://pytorch.org/get-started/locally/)。AMD GPU 用户可查阅 [AMD ROCm 兼容性与安装文档](https://rocm.docs.amd.com/projects/radeon-ryzen/en/latest/)。
+**安装 PyTorch。** 以Windows系统 + AMD显卡为例，其余平台请自行上网查询。[AMD ROCm 兼容性与安装文档](https://rocm.docs.amd.com/projects/radeon-ryzen/en/latest/)。
 
-**安装其余依赖、数据和测试** 以下命令可在项目目录中执行。最后一步默认使用 CPU，读取两条真实心电记录，完成一次前向传播、反向传播和参数更新。
+**安装其余依赖和下载原始数据。** 以下命令可在项目目录中执行。
 
 ```text
 python -m pip install -r requirements.txt
-python scripts/download_data.py
-python scripts/prepare_data.py
-python scripts/check_environment.py
+python preprocessing/download_data.py
+python preprocessing/prepare_data.py
 ```
 
-结果保存在 `outputs/setup/environment_check.json`，心电与噪声波形图保存在 `outputs/setup/waveform_preview.png`。已经配置好 NVIDIA CUDA 或 AMD ROCm 的读者，可以用以下命令在 GPU 上执行同一检查，结果写入 `outputs/setup/environment_check_gpu.json`。
-
-```text
-python scripts/check_environment.py --device cuda
-```
-
-PTB-XL 归档默认分块下载并发为 8，可用 `--workers 1` 改为单连接，或用 `--workers 16` 调整并发。中断后重新运行同一命令可复用已完成的分块。NSTDB 默认只下载实际使用的 `bw/ma/em` 三个记录（六个 `.hea/.dat` 文件）和官方 `SHA256SUMS.txt`；若需要完整数据库，额外传入 `--full-nstdb`。
-
-`--direct` 让本次下载直接连接数据源。下载缓存位于 `data/archives/`，解压后的记录位于 `data/raw/`。准备脚本校验 PTB-XL 全部文件和 NSTDB 上述六个必需文件的官方 SHA256，校验失败会报错。
+NSTDB 只下载实际使用的 `bw/ma/em` 三个记录（六个 `.hea/.dat` 文件）。下载缓存位于 `data/archives/`，解压后的记录位于 `data/raw/`。
 
 ## Python 库用途
 
@@ -36,7 +27,6 @@ PTB-XL 归档默认分块下载并发为 8，可用 `--workers 1` 改为单连�
 | scikit-learn | 后续计算 AUROC、AUPRC、F1 等指标 |
 | Matplotlib | 波形与实验结果可视化 |
 | tqdm、ipykernel | 进度显示与 Notebook 支持 |
-
 
 ## 数据来源与目录
 
@@ -55,68 +45,55 @@ PTB-XL 的数据许可为 CC BY 4.0；NSTDB 为 Open Data Commons Attribution Li
 - 没有任何目标大类标签的记录单独列入 `excluded_no_target.csv`，不标成正常。
 - 使用官方 `strat_fold`：1–8 训练、9 验证、10 测试。
 - `data/manifests/train.csv`、`validation.csv`、`test.csv` 包含记录路径和五列 0/1 标签。
-- `data/manifests/audit.json` 记录文件校验数量、样本数、各类阳性数及噪声形状。
 - `data/manifests/noise_splits.json` 预先将每段原始噪声按时间分为约 60%/20%/20%，边界保留十秒间隔，使用左闭右开采样索引。后续应先按该范围切片，再独立重采样，避免跨集合滤波。
-
-检查脚本固定随机种子为 42，输入两条十二导联心电记录，每条 5000 个采样点。小型一维卷积网络为每条记录输出五个类别分数，使用 Adam 优化器和 0.001 的学习率更新一次参数。检查通过时，结果文件中 `output_shape` 为 `[2, 5]`，`parameters_updated` 为 `true`。这些参数和输出用于检验数据读取与计算流程。
 
 ## 生成信噪比为 6 dB 训练集
 
-完成数据准备后，在 `project/` 中运行下列命令。首条命令生成约 4.10 GB 的波形到 `data/derived/train_6db/`。第二条命令可单独复验。
+完成数据准备后，在 `project/` 中运行下列命令。生成约 4.10 GB 的波形到 `data/derived/train_6db/`。
 
 ```text
-python scripts/generate_train_6db.py
-python scripts/generate_train_6db.py --verify-only
+python preprocessing/generate_train_6db.py
 ```
 
 训练入口使用产物内的 `train.csv`。17,084 个 ECG 各有一条 `original` 和一条加噪样本，共 34,168 行，标签顺序沿用上文的五类顺序。`waveform_path` 相对于 `project/`。当 `format=wfdb` 时，使用 `wfdb.rdrecord(path).p_signal.T.astype("float32")` 读取原始记录；当 `format=npy` 时，使用 `numpy.load(path, allow_pickle=False)`。两者均为 `[12, 5000]`，单位 mV、采样率 500 Hz。
 
 打乱按 ECG 编号排序的训练记录，均分到 `bw`、`ma`、`em`、`mix` 四个条件。`bw_start_360`、`ma_start_360`、`em_start_360` 保存对应原始噪声文件中从零计数的起点，空白表示未使用。第一通道用于六个肢体导联，第二通道用于 V1–V6。`mix` 将三种噪声按通道去均值、调至相同有效值后相加。随后逐导联将总噪声调到心电去均值有效值的 `10**(-6/20)` 倍。人工 50 Hz 工频干扰留给最终测试对不同噪声的普适性。
 
-`audit.json` 汇总各条件数量、有效导联实测信噪比范围和恒定导联。验收逐条核对标签、片段起点、波形和配对关系，并从已保存波形与原始波形之差复算信噪比，容差为 ±0.01 dB。
-
 ## 生成最终测试集
 
-在 `project/` 中执行下列命令，为官方第 10 折的 2,158 条心电各生成一条 50 Hz、6 dB 的模拟工频干扰噪声，输出到 `data/derived/test_50hz_6db/`。第二条命令可单独复验。
+在 `project/` 中执行下列命令，为官方第 10 折的 2,158 条心电各生成一条 50 Hz、6 dB 的模拟工频干扰噪声，输出到 `data/derived/test_50hz_6db/`。
 
 ```text
-python scripts/generate_test_50hz.py
-python scripts/generate_test_50hz.py --verify-only
+python preprocessing/generate_test_50hz.py
 ```
 
 产物中的 `test.csv` 共 4,316 行，每条心电配有 `original` 和 `50hz` 两个版本，沿用训练清单的标签顺序、`format` 和 `waveform_path` 读取方式。加噪波形在 `waveforms/` 中，格式为 `float32[12, 5000]`，采样率 500 Hz、单位 mV。十二导联共享频率 50 Hz、初相位 0 的正弦波，逐导联按去均值有效值缩放到 6 dB。恒定导联保留原值并标记。
-
-`audit.json` 记录成对样本数、实测信噪比范围和恒定导联。验收从落盘波形减去原始心电，检查所有有效导联的信噪比在 6.00 ± 0.01 dB 内，并核对频谱峰值和完整正弦波形。此数据用于最终评价人工工频干扰下的分类表现。
 
 ## 生成一阶 DP 编码
 
 一阶融合模型使用波形及对应的 DP1 两路输入。在 `project/` 中执行下列命令，可为已有训练集、原始验证集和 50 Hz 测试集生成编码到 `data/derived/dp1/`。
 
 ```text
-python scripts/generate_dp1.py
-python scripts/generate_dp1.py --verify-only
+python preprocessing/generate_dp1.py
 ```
 
-产物中的 `train.csv`、`validation.csv`、`test.csv` 分别有 34,168、2,146、4,316 行，保留来源清单的标签与波形信息，增加 `dp1_path` 和 `waveform_sha256`。两个路径字段都相对于 `project/`。原始验证集的行已补齐 `version=original`、`format=wfdb` 和 `waveform_path`。编码文件为 `int8[12, 5000]`，值为 -1、0、1，进入编码分支前转换为 float32。波形基线读取 `waveform_path`，融合模型额外读取同一行的 `dp1_path`。
+产物中的 `train.csv`、`validation.csv`、`test.csv` 分别有 34,168、2,146、4,316 行，保留来源清单的标签与波形信息，增加 `dp1_path`。两个路径字段都相对于 `project/`。原始验证集的行已补齐 `version=original`、`format=wfdb` 和 `waveform_path`。编码文件为 `int8[12, 5000]`，值为 -1、0、1，进入编码分支前转换为 float32。波形基线读取 `waveform_path`，融合模型额外读取同一行的 `dp1_path`。
 
 采用论文式 (1) 的一阶导数过零规则。本项目直接对模型读取的 float32 波形编码，差分计算采用 float64。具体约定为 `d[t]=x[t]-x[t-1]`；当 `d[t]>0` 且 `d[t-1]<=0` 时记 +1，当 `d[t]<0` 且 `d[t-1]>=0` 时记 -1，其余记 0。论文原实验使用 100 Hz 波形和三点滑动平均，本项目使用 500 Hz 波形、无滑动平均。[DP 论文](https://arxiv.org/html/2405.00724v1)
-
-`audit.json` 保存来源清单哈希、边界规则、各版本数量和事件统计。
 
 ## 生成二阶 DP 编码
 
 完成一阶编码后，在 `project/` 中运行下列命令，为同一批 40,630 个样本生成二阶编码到 `data/derived/dp2/`。
 
 ```text
-python scripts/generate_dp2.py
-python scripts/generate_dp2.py --verify-only
+python preprocessing/generate_dp2.py
 ```
 
-产物中的 `train.csv`、`validation.csv`、`test.csv` 分别有 34,168、2,146、4,316 行。每行同时包含 `waveform_path`、`dp1_path` 和 `dp2_path`，路径相对于 `project/`，标签和源波形哈希沿用一阶清单。
+产物中的 `train.csv`、`validation.csv`、`test.csv` 分别有 34,168、2,146、4,316 行。每行同时包含 `waveform_path`、`dp1_path` 和 `dp2_path`，路径相对于 `project/`，标签沿用一阶清单。
 
 二阶编码直接从对应波形计算 `d2[t]=(x[t]-x[t-1])-(x[t-1]-x[t-2])`，再按一阶编码使用的正负过零规则生成事件。输入为实际加载的 float32 波形，内部采用 float64 差分，平滑设置为 `none`，开头三个采样点置零，输出为 `int8[12, 5000]`。
 
-二阶融合模型加载一阶与二阶数组，用 `numpy.concatenate([dp1, dp2], axis=0).astype("float32")` 得到 `[24, 5000]` 的编码输入。前 12 个通道为一阶导联 I–V6，后 12 个为二阶导联 I–V6。原始波形仍由波形分支读取。生成规则、来源清单哈希及各条件事件数量保存在 `audit.json`。
+二阶融合模型加载一阶与二阶数组，用 `numpy.concatenate([dp1, dp2], axis=0).astype("float32")` 得到 `[24, 5000]` 的编码输入。前 12 个通道为一阶导联 I–V6，后 12 个为二阶导联 I–V6。原始波形仍由波形分支读取。
 
 ## 原始波形 CNN 基线
 
@@ -135,25 +112,18 @@ python scripts/generate_dp2.py --verify-only
 
 ### 启动与恢复训练
 
-以下命令均在 `project/` 目录执行。`python` 指已安装依赖的对应环境。使用GPU训练时加上参数 `--device cuda`。以下命令会执行冒烟测试：
+以下命令均在 `project/` 目录执行。
 
 ```text
-python scripts/train_baseline.py --smoke --device cpu
+python training/train_baseline.py
 ```
 
-按设备选择一条正式命令：
+新训练拒绝使用已经存在的输出目录。需要更改 batch size、轮数、学习率等配置时，在首次运行前修改入口函数中的配置；不同模型比较时须保持总轮数和数据条件一致。
+
+每个完整轮次完成后保存检查点。终端中断后，将入口函数中的 `resume` 改为 `True` 再运行：
 
 ```text
-python scripts/train_baseline.py --device cuda --output outputs/baseline_cnn
-python scripts/train_baseline.py --device cpu --output outputs/baseline_cnn
+python training/train_baseline.py
 ```
 
-新训练拒绝使用已经存在的输出目录。需要更改 batch size、轮数、学习率等配置时，在首次运行前通过 `--batch-size`、`--epochs`、`--learning-rate`、`--weight-decay` 指定；不同模型比较时须保持总轮数和数据条件一致。
-
-每个完整轮次完成后保存检查点。终端中断后运行：
-
-```text
-python scripts/train_baseline.py --resume outputs/baseline_cnn/last.pt --device cuda
-```
-
-恢复会直接使用保存的实验配置，`--epochs` 指总轮数而非额外轮数。数据清单哈希和训练设置必须匹配；允许切换 CPU/GPU，但不保证不同设备或依赖版本逐位复现。中断的未完成轮次会重跑；第一轮结束前还没有可恢复的检查点，此时使用新输出目录重启。每个运行目录同时只启动一个训练进程。
+恢复直接使用保存的实验配置，中断的未完成轮次会重跑，每个运行目录同时只启动一个训练进程。

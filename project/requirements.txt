@@ -1,4 +1,4 @@
-# Install PyTorch for your platform first: https://pytorch.org/get-started/locally/
+# Use the local AMD ROCm PyTorch environment.
 # An installed PyTorch 2.x build satisfies the requirement below.
 torch>=2,<3
 numpy==2.2.6

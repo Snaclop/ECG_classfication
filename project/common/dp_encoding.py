@@ -23,8 +23,6 @@ def encode_dp2(waveform):
 
 def _encode(waveform, order):
     x = np.asarray(waveform, dtype=np.float64)
-    if x.ndim != 2 or x.shape[1] < order + 2 or not np.isfinite(x).all():
-        raise ValueError(f"DP{order} requires a finite [lead, time] array with at least {order + 2} samples")
     delta = np.diff(x, n=order, axis=1)
     positive = (delta[:, 1:] > 0) & (delta[:, :-1] <= 0)
     negative = (delta[:, 1:] < 0) & (delta[:, :-1] >= 0)

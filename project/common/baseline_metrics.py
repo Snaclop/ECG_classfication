@@ -2,27 +2,13 @@
 import numpy as np
 from sklearn.metrics import average_precision_score, f1_score, roc_auc_score
 
-if __package__:
-    from .baseline_data import CLASSES
-else:
-    from baseline_data import CLASSES
-
-
-def checked_arrays(labels, probabilities):
-    labels = np.asarray(labels)
-    probabilities = np.asarray(probabilities, dtype=np.float64)
-    if (labels.ndim != 2 or labels.shape[1] != 5 or len(labels) == 0
-            or labels.shape != probabilities.shape or not np.isin(labels, [0, 1]).all()
-            or not np.isfinite(probabilities).all() or np.any((probabilities < 0) | (probabilities > 1))):
-        raise ValueError("Expected nonempty binary labels and finite probabilities [N,5] in [0,1]")
-    return labels, probabilities
+from common.baseline_data import CLASSES
 
 
 def classification_metrics(labels, probabilities, thresholds=0.5):
-    labels, probabilities = checked_arrays(labels, probabilities)
+    labels = np.asarray(labels)
+    probabilities = np.asarray(probabilities, dtype=np.float64)
     thresholds = np.broadcast_to(np.asarray(thresholds, dtype=np.float64), (5,))
-    if not np.isfinite(thresholds).all() or np.any((thresholds < 0) | (thresholds > 1)):
-        raise ValueError("Invalid thresholds")
     predictions = probabilities >= thresholds
     per_class = {}
     for i, name in enumerate(CLASSES):
@@ -47,9 +33,8 @@ def classification_metrics(labels, probabilities, thresholds=0.5):
 
 
 def select_thresholds(labels, probabilities):
-    labels, probabilities = checked_arrays(labels, probabilities)
-    if np.any((labels.sum(axis=0) == 0) | (labels.sum(axis=0) == len(labels))):
-        raise ValueError("Threshold fitting requires positives and negatives for all five classes")
+    labels = np.asarray(labels)
+    probabilities = np.asarray(probabilities, dtype=np.float64)
     thresholds = []
     for column in range(5):
         scored = []
@@ -57,13 +42,12 @@ def select_thresholds(labels, probabilities):
             prediction = probabilities[:, column] >= percent / 100
             tp = int(np.sum(prediction & (labels[:, column] == 1)))
             denominator = int(prediction.sum() + labels[:, column].sum())
-            score = 2 * tp / denominator
+            score = 2 * tp / denominator if denominator else 0.0
             scored.append((score, -abs(percent - 50), -percent))
         thresholds.append(-max(scored)[2] / 100)
     return np.array(thresholds, dtype=np.float64)
 
 
 def is_better(auroc, loss, best):
-    if auroc is None or not np.isfinite(auroc) or not np.isfinite(loss):
-        raise ValueError("Model selection requires finite AUROC and loss for all five classes")
-    return best is None or auroc > best["auroc"] or (auroc == best["auroc"] and loss < best["loss"])
+    return auroc is not None and (best is None or auroc > best["auroc"]
+                                 or (auroc == best["auroc"] and loss < best["loss"]))

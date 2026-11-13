@@ -1,5 +1,4 @@
 """Ordinary 1D CNN with a reusable 128-dimensional waveform encoder."""
-import torch
 from torch import nn
 
 MODEL_SPEC = {"name": "waveform_cnn_v1", "channels": [32, 64, 128, 128],
@@ -22,10 +21,6 @@ class WaveformCNN(nn.Module):
         self.classifier = nn.Sequential(nn.Dropout(0.2), nn.Linear(128, 5))
 
     def encode(self, waveform):
-        if waveform.ndim != 3 or waveform.shape[1:] != (12, 5000):
-            raise ValueError("Expected waveform batch [B,12,5000]")
-        if waveform.dtype != torch.float32:
-            raise ValueError("Expected float32 waveform batch")
         return self.features(waveform)
 
     def forward(self, waveform):

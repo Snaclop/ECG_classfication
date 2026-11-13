@@ -2,7 +2,7 @@
 
 本项目研究如何结合原始心电波形与导数峰值编码（DP），通过深度学习的方法识别并分类噪声干扰下的十二导联心电记录。
 
-若要完整复现，请按照[project/README.md](project/README.md)开始。安装适合自己系统的 PyTorch 后，Windows 和 Linux (macOS 未验证) 用户可以使用相同的命令准备数据和运行检查。
+若要完整复现，请按照[project/README.md](project/README.md)开始。
 
 ## 许可证
 
