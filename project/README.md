@@ -117,3 +117,43 @@ python scripts/generate_dp2.py --verify-only
 二阶编码直接从对应波形计算 `d2[t]=(x[t]-x[t-1])-(x[t-1]-x[t-2])`，再按一阶编码使用的正负过零规则生成事件。输入为实际加载的 float32 波形，内部采用 float64 差分，平滑设置为 `none`，开头三个采样点置零，输出为 `int8[12, 5000]`。
 
 二阶融合模型加载一阶与二阶数组，用 `numpy.concatenate([dp1, dp2], axis=0).astype("float32")` 得到 `[24, 5000]` 的编码输入。前 12 个通道为一阶导联 I–V6，后 12 个为二阶导联 I–V6。原始波形仍由波形分支读取。生成规则、来源清单哈希及各条件事件数量保存在 `audit.json`。
+
+## 原始波形 CNN 基线
+
+只向基线模型提供波形，训练仍使用上述 34,168 条原始与 6 dB 加噪样本。验证使用第 9 折 2,146 条原始记录。
+
+四层普通一维卷积的通道数为 `32→64→128→128`，卷积核均为 7、步长 1、padding 3，无卷积偏置，每层接 BatchNorm 和 ReLU。前三层后接 `MaxPool1d(4)`，末尾使用全局平均池化、Dropout 0.2、五维线性层。`WaveformCNN.encode` 返回 `[B,128]` 特征，`forward` 返回 `[B,5]` logits。模型包含 190,405 个参数。类别顺序固定为 `NORM, MI, STTC, CD, HYP`，预测使用逐类 sigmoid，允许多个或零个阳性标签。
+
+### 训练配置与选择规则
+
+| 设置 | 默认值 |
+|---|---|
+| 随机种子 | 42 |
+| 优化器 | AdamW，学习率 0.001，weight decay 0.0001，`foreach=False`；不使用学习率调度 |
+| 损失 / 精度 | 无类别加权的 `BCEWithLogitsLoss` / FP32 |
+| 选模 | 验证集宏平均 AUROC 最高；并列时验证 BCE 较低优先|
+
+### 启动与恢复训练
+
+以下命令均在 `project/` 目录执行。`python` 指已安装依赖的对应环境。使用GPU训练时加上参数 `--device cuda`。以下命令会执行冒烟测试：
+
+```text
+python scripts/train_baseline.py --smoke --device cpu
+```
+
+按设备选择一条正式命令：
+
+```text
+python scripts/train_baseline.py --device cuda --output outputs/baseline_cnn
+python scripts/train_baseline.py --device cpu --output outputs/baseline_cnn
+```
+
+新训练拒绝使用已经存在的输出目录。需要更改 batch size、轮数、学习率等配置时，在首次运行前通过 `--batch-size`、`--epochs`、`--learning-rate`、`--weight-decay` 指定；不同模型比较时须保持总轮数和数据条件一致。
+
+每个完整轮次完成后保存检查点。终端中断后运行：
+
+```text
+python scripts/train_baseline.py --resume outputs/baseline_cnn/last.pt --device cuda
+```
+
+恢复会直接使用保存的实验配置，`--epochs` 指总轮数而非额外轮数。数据清单哈希和训练设置必须匹配；允许切换 CPU/GPU，但不保证不同设备或依赖版本逐位复现。中断的未完成轮次会重跑；第一轮结束前还没有可恢复的检查点，此时使用新输出目录重启。每个运行目录同时只启动一个训练进程。
