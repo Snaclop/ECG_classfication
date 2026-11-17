@@ -115,7 +115,7 @@ python preprocessing/generate_dp2.py
 以下命令均在 `project/` 目录执行。
 
 ```text
-python training/train_baseline.py
+python training/train_baseline_cnn.py
 ```
 
 新训练拒绝使用已经存在的输出目录。需要更改 batch size、轮数、学习率等配置时，在首次运行前修改入口函数中的配置；不同模型比较时须保持总轮数和数据条件一致。
@@ -123,7 +123,7 @@ python training/train_baseline.py
 每个完整轮次完成后保存检查点。终端中断后，将入口函数中的 `resume` 改为 `True` 再运行：
 
 ```text
-python training/train_baseline.py
+python training/train_baseline_cnn.py
 ```
 
 恢复直接使用保存的实验配置，中断的未完成轮次会重跑，每个运行目录同时只启动一个训练进程。

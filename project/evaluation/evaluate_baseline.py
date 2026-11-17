@@ -61,7 +61,7 @@ def main():
     split = "test"
     manifest = {"test": DEFAULT_TEST, "validation": DEFAULT_VALIDATION}[split]
     batch_size = 32
-    output = ROOT / "outputs/baseline_cnn" / f"evaluation_{split}"
+    output = checkpoint.parent / f"evaluation_{split}"
     torch.set_num_threads(4)
     report = evaluate_checkpoint(checkpoint, manifest, split, batch_size, output)
     for condition, metrics in report["conditions"].items():

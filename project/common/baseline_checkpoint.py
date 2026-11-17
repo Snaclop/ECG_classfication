@@ -7,7 +7,7 @@ import random
 import numpy as np
 import torch
 
-from models.baseline_model import WaveformCNN
+from models import build_model
 
 
 def atomic_torch_save(payload, path):
@@ -63,7 +63,8 @@ def load_checkpoint(path):
 
 def load_predictor(path):
     checkpoint = load_checkpoint(path)
-    model = WaveformCNN().to("cuda")
+    model, _ = build_model(checkpoint["model_spec"]["name"])
+    model = model.to("cuda")
     model.load_state_dict(checkpoint["model_state"], strict=True)
     model.eval()
     return model, checkpoint

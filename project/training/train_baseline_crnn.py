@@ -1,4 +1,4 @@
-"""Train the waveform CNN on the local AMD GPU."""
+"""Train the baseline CRNN from scratch on the local AMD GPU."""
 from pathlib import Path
 import sys
 
@@ -10,10 +10,11 @@ from training.baseline_training import run_training
 
 def main():
     config = {
+        "model_name": "waveform_crnn_v1",
         "train_manifest": str(DEFAULT_TRAIN),
         "validation_manifest": str(DEFAULT_VALIDATION),
         "data_root": str(ROOT),
-        "output": str(ROOT / "outputs/baseline_cnn"),
+        "output": str(ROOT / "outputs/baseline_crnn"),
         "device": "cuda",
         "seed": 42,
         "epochs": 30,

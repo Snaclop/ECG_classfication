@@ -19,7 +19,7 @@ from common.baseline_checkpoint import (
     atomic_torch_save, atomic_text, write_json, capture_rng, restore_rng,
     model_snapshot, load_checkpoint,
 )
-from models.baseline_model import MODEL_SPEC, WaveformCNN
+from models import build_model
 
 
 def environment_report(model):
@@ -83,8 +83,9 @@ def run_training(config, resume=None):
     if saved is None:
         output.mkdir(parents=True, exist_ok=False)
 
+    model_name = saved["model_spec"]["name"] if saved else config.get("model_name", "waveform_cnn_v1")
     device = torch.device("cuda")
-    print(f"Waveform CNN training\nDevice: {device}; output: {output}", flush=True)
+    print(f"{model_name} training\nDevice: {device}; output: {output}", flush=True)
     torch.set_num_threads(config["num_threads"])
     random.seed(config["seed"])
     np.random.seed(config["seed"])
@@ -103,7 +104,8 @@ def run_training(config, resume=None):
         WaveformDataset(validation_rows, config["data_root"]), batch_size=config["batch_size"],
         shuffle=False, num_workers=config["num_workers"],
     )
-    model = WaveformCNN().to(device)
+    model, model_spec = build_model(model_name)
+    model = model.to(device)
     optimizer = torch.optim.AdamW(
         model.parameters(), lr=config["learning_rate"],
         weight_decay=config["weight_decay"], foreach=False,
@@ -127,7 +129,7 @@ def run_training(config, resume=None):
 
     common = {
         "classes": CLASSES, "leads": LEADS, "input_spec": INPUT_SPEC,
-        "model_spec": MODEL_SPEC, "config": config,
+        "model_spec": model_spec, "config": config,
     }
     for epoch in range(start + 1, config["epochs"] + 1):
         torch.cuda.synchronize()

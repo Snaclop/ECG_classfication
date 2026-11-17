@@ -32,7 +32,7 @@ def predict_record(checkpoint_path, waveform_path):
 def main():
     checkpoint = ROOT / "outputs/baseline_cnn/best.pt"
     waveform_path = ROOT / read_manifest(DEFAULT_VALIDATION)[0]["waveform_path"]
-    output = ROOT / "outputs/baseline_cnn/prediction.json"
+    output = checkpoint.parent / "prediction.json"
     torch.set_num_threads(4)
     result = predict_record(checkpoint, waveform_path)
     output.parent.mkdir(parents=True, exist_ok=True)

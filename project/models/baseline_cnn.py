@@ -1,4 +1,4 @@
-"""Ordinary 1D CNN with a reusable 128-dimensional waveform encoder."""
+"""CNN baseline with a reusable 128-dimensional waveform encoder."""
 from torch import nn
 
 MODEL_SPEC = {"name": "waveform_cnn_v1", "channels": [32, 64, 128, 128],
