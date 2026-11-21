@@ -24,12 +24,14 @@ def predict_record(checkpoint_path, waveform_path):
     if checkpoint["model_spec"].get("uses_dp1", False):
         dp1 = encode_dp1(waveform).astype(waveform.dtype)
         inputs += (torch.from_numpy(dp1)[None],)
+    if checkpoint["model_spec"].get("dp1_only", False):
+        inputs = inputs[1:]
     with torch.inference_mode():
         probabilities = model(*model_inputs_to(inputs, "cuda")).sigmoid()[0].cpu().numpy()
     thresholds = checkpoint["thresholds"]
     return {
         "waveform": str(waveform_path.resolve()), "epoch": checkpoint["epoch"],
-        "input_spec": INPUT_SPEC, "leads": LEADS,
+        "input_spec": checkpoint.get("input_spec", INPUT_SPEC), "leads": LEADS,
         "probabilities": dict(zip(CLASSES, probabilities.astype(float).tolist())),
         "thresholds": dict(zip(CLASSES, thresholds)),
         "predicted_labels": [name for name, probability, threshold in zip(CLASSES, probabilities, thresholds)

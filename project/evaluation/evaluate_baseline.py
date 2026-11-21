@@ -30,8 +30,10 @@ def evaluate_checkpoint(checkpoint_path, manifest, split, batch_size, output):
             manifest = {"test": DEFAULT_TEST, "validation": DEFAULT_VALIDATION}[split]
     rows = read_manifest(manifest)
     output.mkdir(parents=True, exist_ok=False)
-    loader = DataLoader(WaveformDataset(rows, use_dp1=use_dp1), batch_size=batch_size,
-                        shuffle=False, num_workers=0)
+    dataset = WaveformDataset(
+        rows, use_dp1=use_dp1, dp1_only=checkpoint["model_spec"].get("dp1_only", False),
+    )
+    loader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=0)
     labels, probabilities, indices, loss = collect_predictions(model, loader, torch.device("cuda"))
     ordered_rows = [rows[index] for index in indices]
     thresholds = np.asarray(checkpoint["thresholds"], dtype=np.float64)

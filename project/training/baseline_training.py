@@ -98,13 +98,14 @@ def run_training(config, resume=None):
     validation_rows = read_manifest(config["validation_manifest"])
     model, model_spec = build_model(model_name)
     use_dp1 = model_spec.get("uses_dp1", False)
+    dp1_only = model_spec.get("dp1_only", False)
     train_loader = DataLoader(
-        WaveformDataset(train_rows, config["data_root"], use_dp1=use_dp1),
+        WaveformDataset(train_rows, config["data_root"], use_dp1=use_dp1, dp1_only=dp1_only),
         batch_size=config["batch_size"],
         shuffle=True, generator=generator, num_workers=config["num_workers"],
     )
     validation_loader = DataLoader(
-        WaveformDataset(validation_rows, config["data_root"], use_dp1=use_dp1),
+        WaveformDataset(validation_rows, config["data_root"], use_dp1=use_dp1, dp1_only=dp1_only),
         batch_size=config["batch_size"],
         shuffle=False, num_workers=config["num_workers"],
     )
@@ -131,7 +132,8 @@ def run_training(config, resume=None):
         }, output / "data_summary.json")
 
     common = {
-        "classes": CLASSES, "leads": LEADS, "input_spec": INPUT_SPEC,
+        "classes": CLASSES, "leads": LEADS,
+        "input_spec": model_spec.get("input_spec", INPUT_SPEC),
         "model_spec": model_spec, "config": config,
     }
     for epoch in range(start + 1, config["epochs"] + 1):

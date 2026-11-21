@@ -42,23 +42,29 @@ def read_waveform(path, waveform_format):
 
 
 class WaveformDataset(Dataset):
-    def __init__(self, rows, root=ROOT, *, use_dp1=False):
+    def __init__(self, rows, root=ROOT, *, use_dp1=False, dp1_only=False):
         self.rows = rows
         self.root = Path(root)
         self.use_dp1 = use_dp1
+        self.dp1_only = dp1_only
 
     def __len__(self):
         return len(self.rows)
 
     def __getitem__(self, index):
         row = self.rows[index]
+        labels = torch.tensor([int(row[c]) for c in CLASSES], dtype=torch.float32)
+        if self.use_dp1 or self.dp1_only:
+            dp1 = torch.from_numpy(
+                np.load(self.root / row["dp1_path"], allow_pickle=False).astype(np.float32)
+            )
+        if self.dp1_only:
+            return dp1, labels, index
         waveform = read_waveform(self.root / row["waveform_path"], row["format"])
-        labels = np.array([int(row[c]) for c in CLASSES], dtype=np.float32)
         inputs = torch.from_numpy(waveform)
         if self.use_dp1:
-            dp1 = np.load(self.root / row["dp1_path"], allow_pickle=False).astype(np.float32)
-            inputs = (inputs, torch.from_numpy(dp1))
-        return inputs, torch.from_numpy(labels), index
+            inputs = (inputs, dp1)
+        return inputs, labels, index
 
 
 def model_inputs_to(inputs, device):
