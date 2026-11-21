@@ -11,17 +11,27 @@ import torch
 from torch.utils.data import DataLoader
 
 from common.baseline_checkpoint import atomic_text, load_predictor, write_json
-from common.baseline_data import ROOT, CLASSES, DEFAULT_TEST, DEFAULT_VALIDATION, WaveformDataset, read_manifest
+from common.baseline_data import (
+    ROOT, CLASSES, DEFAULT_TEST, DEFAULT_VALIDATION, DP1_TEST, DP1_VALIDATION,
+    WaveformDataset, read_manifest,
+)
 from common.baseline_metrics import classification_metrics
 from training.baseline_training import collect_predictions
 
 
 def evaluate_checkpoint(checkpoint_path, manifest, split, batch_size, output):
     output = Path(output)
-    output.mkdir(parents=True, exist_ok=False)
     model, checkpoint = load_predictor(checkpoint_path)
+    use_dp1 = checkpoint["model_spec"].get("uses_dp1", False)
+    if manifest is None:
+        if use_dp1:
+            manifest = {"test": DP1_TEST, "validation": DP1_VALIDATION}[split]
+        else:
+            manifest = {"test": DEFAULT_TEST, "validation": DEFAULT_VALIDATION}[split]
     rows = read_manifest(manifest)
-    loader = DataLoader(WaveformDataset(rows), batch_size=batch_size, shuffle=False, num_workers=0)
+    output.mkdir(parents=True, exist_ok=False)
+    loader = DataLoader(WaveformDataset(rows, use_dp1=use_dp1), batch_size=batch_size,
+                        shuffle=False, num_workers=0)
     labels, probabilities, indices, loss = collect_predictions(model, loader, torch.device("cuda"))
     ordered_rows = [rows[index] for index in indices]
     thresholds = np.asarray(checkpoint["thresholds"], dtype=np.float64)
@@ -59,7 +69,7 @@ def evaluate_checkpoint(checkpoint_path, manifest, split, batch_size, output):
 def main():
     checkpoint = ROOT / "outputs/baseline_cnn/best.pt"
     split = "test"
-    manifest = {"test": DEFAULT_TEST, "validation": DEFAULT_VALIDATION}[split]
+    manifest = None  # Use the checkpoint's default manifest for this split.
     batch_size = 32
     output = checkpoint.parent / f"evaluation_{split}"
     torch.set_num_threads(4)

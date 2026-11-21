@@ -6,18 +6,22 @@ MODEL_SPEC = {"name": "waveform_cnn_v1", "channels": [32, 64, 128, 128],
               "max_pool_first_three": 4, "dropout": 0.2, "outputs": 5}
 
 
+def build_cnn_features():
+    layers = []
+    incoming = 12
+    for index, outgoing in enumerate(MODEL_SPEC["channels"]):
+        layers.extend([nn.Conv1d(incoming, outgoing, 7, padding=3, bias=False),
+                       nn.BatchNorm1d(outgoing), nn.ReLU()])
+        if index < 3:
+            layers.append(nn.MaxPool1d(4))
+        incoming = outgoing
+    return nn.Sequential(*layers, nn.AdaptiveAvgPool1d(1), nn.Flatten(1))
+
+
 class WaveformCNN(nn.Module):
     def __init__(self):
         super().__init__()
-        layers = []
-        incoming = 12
-        for index, outgoing in enumerate(MODEL_SPEC["channels"]):
-            layers.extend([nn.Conv1d(incoming, outgoing, 7, padding=3, bias=False),
-                           nn.BatchNorm1d(outgoing), nn.ReLU()])
-            if index < 3:
-                layers.append(nn.MaxPool1d(4))
-            incoming = outgoing
-        self.features = nn.Sequential(*layers, nn.AdaptiveAvgPool1d(1), nn.Flatten(1))
+        self.features = build_cnn_features()
         self.classifier = nn.Sequential(nn.Dropout(0.2), nn.Linear(128, 5))
 
     def encode(self, waveform):

@@ -8,7 +8,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import torch
 
 from common.baseline_checkpoint import load_predictor, write_json
-from common.baseline_data import ROOT, CLASSES, INPUT_SPEC, LEADS, DEFAULT_VALIDATION, read_manifest, read_waveform
+from common.baseline_data import (
+    ROOT, CLASSES, INPUT_SPEC, LEADS, DEFAULT_VALIDATION,
+    model_inputs_to, read_manifest, read_waveform,
+)
+from common.dp_encoding import encode_dp1
 
 
 def predict_record(checkpoint_path, waveform_path):
@@ -16,8 +20,12 @@ def predict_record(checkpoint_path, waveform_path):
     waveform_format = "npy" if waveform_path.suffix.lower() == ".npy" else "wfdb"
     waveform = read_waveform(waveform_path, waveform_format)
     model, checkpoint = load_predictor(checkpoint_path)
+    inputs = (torch.from_numpy(waveform)[None],)
+    if checkpoint["model_spec"].get("uses_dp1", False):
+        dp1 = encode_dp1(waveform).astype(waveform.dtype)
+        inputs += (torch.from_numpy(dp1)[None],)
     with torch.inference_mode():
-        probabilities = model(torch.from_numpy(waveform)[None].to("cuda")).sigmoid()[0].cpu().numpy()
+        probabilities = model(*model_inputs_to(inputs, "cuda")).sigmoid()[0].cpu().numpy()
     thresholds = checkpoint["thresholds"]
     return {
         "waveform": str(waveform_path.resolve()), "epoch": checkpoint["epoch"],

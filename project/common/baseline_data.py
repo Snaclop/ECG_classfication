@@ -14,6 +14,9 @@ INPUT_SPEC = {"shape": [12, 5000], "fs_hz": 500, "units": "mV", "dtype": "float3
 DEFAULT_TRAIN = ROOT / "data/derived/train_6db/train.csv"
 DEFAULT_VALIDATION = ROOT / "data/manifests/validation.csv"
 DEFAULT_TEST = ROOT / "data/derived/test_50hz_6db/test.csv"
+DP1_TRAIN = ROOT / "data/derived/dp1/train.csv"
+DP1_VALIDATION = ROOT / "data/derived/dp1/validation.csv"
+DP1_TEST = ROOT / "data/derived/dp1/test.csv"
 
 
 def read_manifest(path):
@@ -39,9 +42,10 @@ def read_waveform(path, waveform_format):
 
 
 class WaveformDataset(Dataset):
-    def __init__(self, rows, root=ROOT):
+    def __init__(self, rows, root=ROOT, *, use_dp1=False):
         self.rows = rows
         self.root = Path(root)
+        self.use_dp1 = use_dp1
 
     def __len__(self):
         return len(self.rows)
@@ -50,4 +54,15 @@ class WaveformDataset(Dataset):
         row = self.rows[index]
         waveform = read_waveform(self.root / row["waveform_path"], row["format"])
         labels = np.array([int(row[c]) for c in CLASSES], dtype=np.float32)
-        return torch.from_numpy(waveform), torch.from_numpy(labels), index
+        inputs = torch.from_numpy(waveform)
+        if self.use_dp1:
+            dp1 = np.load(self.root / row["dp1_path"], allow_pickle=False).astype(np.float32)
+            inputs = (inputs, torch.from_numpy(dp1))
+        return inputs, torch.from_numpy(labels), index
+
+
+def model_inputs_to(inputs, device):
+    """Move a waveform tensor or a collated waveform/DP pair to the model device."""
+    if isinstance(inputs, torch.Tensor):
+        return (inputs.to(device),)
+    return tuple(tensor.to(device) for tensor in inputs)

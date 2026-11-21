@@ -1,4 +1,4 @@
-"""Waveform training and recovery at complete epoch boundaries."""
+"""ECG model training and recovery at complete epoch boundaries."""
 from collections import Counter
 import importlib.metadata
 import json
@@ -13,7 +13,7 @@ import torch
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from common.baseline_data import CLASSES, LEADS, INPUT_SPEC, WaveformDataset, read_manifest
+from common.baseline_data import CLASSES, LEADS, INPUT_SPEC, WaveformDataset, model_inputs_to, read_manifest
 from common.baseline_metrics import classification_metrics, select_thresholds, is_better
 from common.baseline_checkpoint import (
     atomic_torch_save, atomic_text, write_json, capture_rng, restore_rng,
@@ -36,10 +36,10 @@ def environment_report(model):
 def train_epoch(model, loader, optimizer, device):
     model.train()
     total_loss, count = 0.0, 0
-    for waveform, labels, _ in tqdm(loader, desc="train"):
-        waveform, labels = waveform.to(device), labels.to(device)
+    for inputs, labels, _ in tqdm(loader, desc="train"):
+        inputs, labels = model_inputs_to(inputs, device), labels.to(device)
         optimizer.zero_grad(set_to_none=True)
-        loss = torch.nn.functional.binary_cross_entropy_with_logits(model(waveform), labels)
+        loss = torch.nn.functional.binary_cross_entropy_with_logits(model(*inputs), labels)
         loss.backward()
         optimizer.step()
         total_loss += float(loss.detach()) * len(labels)
@@ -52,8 +52,8 @@ def collect_predictions(model, loader, device):
     all_labels, probabilities, all_indices = [], [], []
     total_loss, count = 0.0, 0
     with torch.inference_mode():
-        for waveform, labels, indices in tqdm(loader, desc="evaluate"):
-            logits = model(waveform.to(device))
+        for inputs, labels, indices in tqdm(loader, desc="evaluate"):
+            logits = model(*model_inputs_to(inputs, device))
             loss = torch.nn.functional.binary_cross_entropy_with_logits(logits, labels.to(device))
             all_labels.append(labels.numpy())
             probabilities.append(logits.sigmoid().cpu().numpy())
@@ -96,15 +96,18 @@ def run_training(config, resume=None):
 
     train_rows = read_manifest(config["train_manifest"])
     validation_rows = read_manifest(config["validation_manifest"])
+    model, model_spec = build_model(model_name)
+    use_dp1 = model_spec.get("uses_dp1", False)
     train_loader = DataLoader(
-        WaveformDataset(train_rows, config["data_root"]), batch_size=config["batch_size"],
+        WaveformDataset(train_rows, config["data_root"], use_dp1=use_dp1),
+        batch_size=config["batch_size"],
         shuffle=True, generator=generator, num_workers=config["num_workers"],
     )
     validation_loader = DataLoader(
-        WaveformDataset(validation_rows, config["data_root"]), batch_size=config["batch_size"],
+        WaveformDataset(validation_rows, config["data_root"], use_dp1=use_dp1),
+        batch_size=config["batch_size"],
         shuffle=False, num_workers=config["num_workers"],
     )
-    model, model_spec = build_model(model_name)
     model = model.to(device)
     optimizer = torch.optim.AdamW(
         model.parameters(), lr=config["learning_rate"],
